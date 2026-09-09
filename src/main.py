@@ -26,6 +26,19 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 RATING_WORDS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
 
 
+class BookRecord(BaseModel):
+    title: str
+    product_url: HttpUrl
+    price_text: str
+    price_gbp: float
+    availability_text: str
+    rating_text: str
+    rating_value: int
+    description: str | None
+    source_page: HttpUrl
+    fetched_at: str
+
+
 def _cache_path_for(url: str) -> str:
     safe_name = re.sub(r"[^a-zA-Z0-9]+", "_", url).strip("_")
     return os.path.join(CACHE_DIR, f"{safe_name}.html")
@@ -136,3 +149,31 @@ def extract_book(url: str, source_page: str):
         "fetched_at": datetime.now(timezone.utc).isoformat(),  # provenance
     }
     return raw, 200
+
+
+def normalize_and_validate(raw: dict):
+    try:
+        price_match = re.search(r"[\d.]+", raw["price_text"])
+        price_gbp = float(price_match.group()) if price_match else None
+        if price_gbp is None:
+            return None, "could not parse price_text into a number"
+
+        rating_value = RATING_WORDS.get(raw["rating_text"], 0)
+
+        record = BookRecord(
+            title=raw["title"],
+            product_url=raw["product_url"],
+            price_text=raw["price_text"],
+            price_gbp=price_gbp,
+            availability_text=raw["availability_text"],
+            rating_text=raw["rating_text"],
+            rating_value=rating_value,
+            description=raw["description"],
+            source_page=raw["source_page"],
+            fetched_at=raw["fetched_at"],
+        )
+        return record, None
+    except ValidationError as e:
+        return None, str(e)
+    except Exception as e:
+        return None, f"unexpected error: {e}"
