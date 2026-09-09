@@ -177,3 +177,78 @@ def normalize_and_validate(raw: dict):
         return None, str(e)
     except Exception as e:
         return None, f"unexpected error: {e}"
+
+
+def main():
+    start_time = time.time()
+    started_at = datetime.now(timezone.utc).isoformat()
+
+    book_urls = discover_book_urls()
+    book_urls.append(urljoin(BASE_URL, "catalogue/this-book-does-not-exist_9999/index.html"))
+
+    valid_records = []
+    invalid_records = []
+    failed_pages = []
+    cache_hits = 0
+    pages_fetched = 0
+    seen_urls = set()
+
+    for url in book_urls:
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+
+        cache_existed = os.path.exists(_cache_path_for(url))
+        raw, status = extract_book(url, source_page=CATALOGUE_START)
+
+        if cache_existed:
+            cache_hits += 1
+        else:
+            pages_fetched += 1
+
+        if raw is None:
+            failed_pages.append({"url": url, "status": status})
+            continue
+
+        record, error = normalize_and_validate(raw)
+        if record is None:
+            invalid_records.append({"url": url, "reason": error, "raw": raw})
+            continue
+
+        valid_records.append(json.loads(record.model_dump_json()))
+
+    dedup_by_url = {}
+    for rec in valid_records:
+        dedup_by_url[rec["product_url"]] = rec
+    valid_records = list(dedup_by_url.values())
+
+    with open(os.path.join(OUTPUT_DIR, "books.json"), "w", encoding="utf-8") as f:
+        json.dump(valid_records, f, indent=2)
+
+    with open(os.path.join(OUTPUT_DIR, "errors.json"), "w", encoding="utf-8") as f:
+        json.dump(invalid_records, f, indent=2)
+
+    duration = round(time.time() - start_time, 2)
+
+    report = {
+        "started_at": started_at,
+        "duration_seconds": duration,
+        "catalogue_pages": 3,
+        "book_urls_discovered": len(seen_urls),
+        "pages_fetched": pages_fetched,
+        "cache_hits": cache_hits,
+        "valid_records": len(valid_records),
+        "invalid_records": len(invalid_records),
+        "failed_pages": len(failed_pages),
+        "failed_page_details": failed_pages,
+    }
+
+    with open(os.path.join(OUTPUT_DIR, "run-report.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+
+    print("\n--- RUN REPORT ---")
+    print(json.dumps(report, indent=2))
+
+
+if __name__ == "__main__":
+    main()
