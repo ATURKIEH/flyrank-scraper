@@ -67,3 +67,30 @@ def fetch(url: str, allow_retry: bool = True):
         print(f"FETCH FAILED {resp.status_code}: {url}")
         time.sleep(DELAY_BETWEEN_REQUESTS)
         return None, resp.status_code
+
+
+
+def discover_book_urls():
+    urls = []
+    page_url = CATALOGUE_START
+    pages_visited = 0
+
+    while page_url and pages_visited < 3:
+        html, status = fetch(page_url)
+        pages_visited += 1
+        if html is None:
+            break
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        for h3 in soup.select("article.product_pod h3 a"):
+            href = h3.get("href")
+            absolute = urljoin(page_url, href)
+            urls.append(absolute)
+
+        next_link = soup.select_one("li.next a")
+        page_url = urljoin(page_url, next_link.get("href")) if next_link else None
+
+    unique_urls = list(dict.fromkeys(urls))
+    print(f"catalogue_pages={pages_visited} discovered={len(urls)} unique_urls={len(unique_urls)}")
+    return unique_urls
