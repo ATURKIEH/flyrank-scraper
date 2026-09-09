@@ -94,3 +94,45 @@ def discover_book_urls():
     unique_urls = list(dict.fromkeys(urls))
     print(f"catalogue_pages={pages_visited} discovered={len(urls)} unique_urls={len(unique_urls)}")
     return unique_urls
+
+
+
+def extract_book(url: str, source_page: str):
+    html, status = fetch(url)
+    if html is None:
+        return None, status
+
+    soup = BeautifulSoup(html, "html.parser")
+    product_main = soup.select_one("div.product_main")
+
+    title = product_main.find("h1").get_text(strip=True)
+    price_text = product_main.select_one("p.price_color").get_text(strip=True)
+
+    availability_el = product_main.select_one("p.availability")
+    availability_text = availability_el.get_text(strip=True) if availability_el else ""
+
+    rating_el = product_main.select_one("p.star-rating")
+    rating_text = "Zero"
+    if rating_el and rating_el.get("class"):
+        for c in rating_el.get("class"):
+            if c in RATING_WORDS:
+                rating_text = c
+                break
+    desc_heading = soup.select_one("#product_description")
+    if desc_heading:
+        desc_p = desc_heading.find_next_sibling("p")
+        description = desc_p.get_text(strip=True) if desc_p else None
+    else:
+        description = None
+
+    raw = {
+        "title": title,
+        "product_url": url,
+        "price_text": price_text,
+        "availability_text": availability_text,
+        "rating_text": rating_text,
+        "description": description,
+        "source_page": source_page,       # provenance
+        "fetched_at": datetime.now(timezone.utc).isoformat(),  # provenance
+    }
+    return raw, 200
