@@ -229,7 +229,6 @@ def main():
         json.dump(invalid_records, f, indent=2)
 
     duration = round(time.time() - start_time, 2)
-
     report = {
         "started_at": started_at,
         "duration_seconds": duration,
